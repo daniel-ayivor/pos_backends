@@ -1,6 +1,157 @@
 # POS Backend API
 
-A comprehensive Node.js, Express.js, and PostgreSQL backend for a Point of Sale (POS) system designed for advertising agencies.
+A comprehensive Point of Sale (POS) backend API for advertising agencies, built with Node.js, Express, and PostgreSQL.
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js (>= 18.0.0)
+- PostgreSQL database
+- npm or yarn
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd POS_BACKEND
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Environment Setup**
+   ```bash
+   # Copy the environment template
+   cp env.example .env
+   
+   # Edit the .env file with your configuration
+   # See Environment Variables section below
+   ```
+
+4. **Database Setup**
+   ```bash
+   # Create PostgreSQL database
+   createdb pos_database
+   
+   # Run migrations
+   npm run migrate
+   
+   # (Optional) Seed with sample data
+   npm run seed
+   ```
+
+5. **Start the server**
+   ```bash
+   # Development mode
+   npm run dev
+   
+   # Production mode
+   npm start
+   ```
+
+## 🔧 Environment Variables
+
+### Required Setup
+Create a `.env` file in the root directory with the following variables:
+
+```bash
+# Copy from env.example
+cp env.example .env
+```
+
+### Environment Variables Explained
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `PORT` | Server port | 5000 | No |
+| `NODE_ENV` | Environment mode | development | No |
+| `DB_HOST` | Database host | localhost | Yes |
+| `DB_PORT` | Database port | 5432 | Yes |
+| `DB_NAME` | Database name | pos_database | Yes |
+| `DB_USER` | Database user | postgres | Yes |
+| `DB_PASSWORD` | Database password | - | Yes |
+| `JWT_SECRET` | JWT signing secret | - | Yes |
+| `JWT_EXPIRES_IN` | JWT expiration time | 24h | No |
+| `CORS_ORIGIN` | Allowed CORS origin | http://localhost:3000 | No |
+
+### Security Notes
+- **Never commit `.env` files to git**
+- Use strong, unique passwords for production
+- Generate a secure JWT secret for production
+- Update CORS_ORIGIN for your frontend domain
+
+## 📊 API Endpoints
+
+### Authentication
+- `POST /api/auth/login` - User login
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/logout` - User logout
+
+### Users & Employees
+- `GET /api/users` - Get all users
+- `POST /api/users` - Create user
+- `GET /api/employees` - Get all employees
+- `POST /api/employees` - Create employee
+
+### Clients & Services
+- `GET /api/clients` - Get all clients
+- `POST /api/clients` - Create client
+- `GET /api/services` - Get all services
+- `POST /api/services` - Create service
+
+### Projects & Invoices
+- `GET /api/projects` - Get all projects
+- `POST /api/projects` - Create project
+- `GET /api/invoices` - Get all invoices
+- `POST /api/invoices` - Create invoice
+
+### Analytics & Time Tracking
+- `GET /api/analytics` - Get analytics data
+- `GET /api/time-tracking` - Get time tracking data
+
+## 🛠️ Development
+
+### Available Scripts
+```bash
+npm run dev          # Start development server
+npm start           # Start production server
+npm test            # Run tests
+npm run migrate     # Run database migrations
+npm run seed        # Seed database with sample data
+```
+
+### Database Migrations
+```bash
+# Run migrations
+npm run migrate
+
+# The migration script will create all necessary tables
+```
+
+## 🔒 Security Features
+
+- JWT-based authentication
+- Password hashing with bcrypt
+- Rate limiting
+- CORS protection
+- Helmet security headers
+- Input validation
+- SQL injection protection
+
+## 📝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+MIT License - see LICENSE file for details
 
 ## Features
 
@@ -360,5 +511,6 @@ For detailed API documentation, refer to the individual route files or use tools
 
 ## License
 
-This project is licensed under the MIT License. #   p o s _ b a c k e n d  
+This project is licensed under the MIT License. #   p o s _ b a c k e n d 
+ 
  
