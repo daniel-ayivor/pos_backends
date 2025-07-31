@@ -12,7 +12,8 @@
     "setup": "node setup.js",
     "setup-supabase": "node setup-supabase.js",
     "install-deps": "node install-deps.js",
-    "test-connection": "node test-connection.js"
+    "test-connection": "node test-connection.js",
+    "fix-deployment": "node fix-deployment.js"
   },
   "keywords": ["pos", "backend", "api", "express", "postgresql"],
   "author": "Your Name",

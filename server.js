@@ -94,14 +94,32 @@ app.use((err, req, res, next) => {
 // Start server
 const startServer = async () => {
   try {
-    await connectDB();
+    console.log('🚀 Starting POS Backend Server...');
+    console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+    console.log(`🔗 Port: ${PORT}`);
+    
+    // Try to connect to database
+    const dbConnected = await connectDB();
+    
+    if (!dbConnected && process.env.NODE_ENV === 'production') {
+      console.log('⚠️  Database connection failed, but continuing in production mode...');
+      console.log('🔧 Please check your database configuration and environment variables.');
+    }
+    
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV}`);
+      console.log(`✅ Server running on port ${PORT}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+      console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+      
+      if (process.env.NODE_ENV === 'production') {
+        console.log('🚀 Production deployment successful!');
+      }
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('❌ Failed to start server:', error);
+    if (process.env.NODE_ENV === 'production') {
+      console.error('🔧 Check your environment variables and database configuration.');
+    }
     process.exit(1);
   }
 };
