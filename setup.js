@@ -75,8 +75,8 @@ function runSetup() {
     },
     {
       name: 'CORS_ORIGIN',
-      question: 'CORS origin (default: http://localhost:3000): ',
-      default: 'http://localhost:3000'
+      question: 'CORS origin (default: https://pos-service-alpha.vercel.app): ',
+      default: 'https://pos-service-alpha.vercel.app'
     }
   ];
 

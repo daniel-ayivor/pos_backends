@@ -18,7 +18,7 @@ const supabaseConfig = {
   DB_PASSWORD: 'shopeEase@23',
   JWT_SECRET: crypto.randomBytes(64).toString('hex'),
   JWT_EXPIRES_IN: '24h',
-  CORS_ORIGIN: 'http://localhost:3000',
+  CORS_ORIGIN: 'https://pos-service-alpha.vercel.app',
   RATE_LIMIT_WINDOW_MS: '900000',
   RATE_LIMIT_MAX_REQUESTS: '100',
   MAX_FILE_SIZE: '5242880',
