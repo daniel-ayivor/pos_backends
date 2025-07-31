@@ -39,6 +39,11 @@ function runSetup() {
       default: '5000'
     },
     {
+      name: 'DB_TYPE',
+      question: 'Database type (1 for local, 2 for Supabase): ',
+      default: '1'
+    },
+    {
       name: 'DB_HOST',
       question: 'Database host (default: localhost): ',
       default: 'localhost'
@@ -87,6 +92,18 @@ function runSetup() {
     const q = questions[currentQuestion];
     rl.question(q.question, (answer) => {
       answers[q.name] = answer.trim() || q.default;
+      
+      // Handle Supabase configuration
+      if (q.name === 'DB_TYPE' && answers[q.name] === '2') {
+        // Auto-configure for Supabase
+        answers.DB_HOST = 'db.pbcvvvzvycoovtfbxljh.supabase.co';
+        answers.DB_PORT = '5432';
+        answers.DB_NAME = 'postgres';
+        answers.DB_USER = 'postgres';
+        answers.DB_PASSWORD = 'shopeEase@23';
+        console.log('✅ Auto-configured for Supabase database');
+      }
+      
       currentQuestion++;
       askQuestion();
     });
