@@ -66,8 +66,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Health check endpoint
-app.get('', (req, res) => {
-  res.json/health({ 
+app.get('/api/health', (req, res) => {
+  res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV 
@@ -142,4 +142,4 @@ const startServer = async () => {
 
 startServer();
 
-module.exports = app; 
+module.exports = app;
