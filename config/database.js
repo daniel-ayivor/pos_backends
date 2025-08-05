@@ -2,6 +2,7 @@ const { Pool } = require('pg');
 
 // Enhanced database configuration for production
 const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || "postgresql://postgres:shopeEase@23@db.icrwohabyhomtpakefbs.supabase.co:5432/postgres",
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
   database: process.env.DB_NAME || 'pos_database',
@@ -72,4 +73,4 @@ module.exports = {
   query,
   getClient,
   pool
-}; 
+};
