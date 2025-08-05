@@ -29,6 +29,7 @@ app.use(compression());
 const allowedOrigins = [
   'http://localhost:3000',
   'https://pos-service-alpha.vercel.app',
+  'https://pos-backends.onrender.com',
   process.env.CORS_ORIGIN
 ].filter(Boolean); // Remove any undefined values
 
@@ -65,8 +66,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
+app.get('', (req, res) => {
+  res.json/health({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV 
@@ -109,31 +110,31 @@ app.use((err, req, res, next) => {
 // Start server
 const startServer = async () => {
   try {
-    console.log('🚀 Starting POS Backend Server...');
-    console.log(`📊 Environment: ${process.env.NODE_ENV}`);
-    console.log(`🔗 Port: ${PORT}`);
+    console.log(' Starting POS Backend Server...');
+    console.log(` Environment: ${process.env.NODE_ENV}`);
+    console.log(` Port: ${PORT}`);
     
     // Try to connect to database
     const dbConnected = await connectDB();
     
     if (!dbConnected && process.env.NODE_ENV === 'production') {
-      console.log('⚠️  Database connection failed, but continuing in production mode...');
-      console.log('🔧 Please check your database configuration and environment variables.');
+      console.log('  Database connection failed, but continuing in production mode...');
+      console.log(' Please check your database configuration and environment variables.');
     }
     
     app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
-      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+      console.log(` Server running on port ${PORT}`);
+      console.log(` Health check: http://localhost:${PORT}/health`);
+      console.log(`Environment: ${process.env.NODE_ENV}`);
       
       if (process.env.NODE_ENV === 'production') {
-        console.log('🚀 Production deployment successful!');
+        console.log(' Production deployment successful!');
       }
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error(' Failed to start server:', error);
     if (process.env.NODE_ENV === 'production') {
-      console.error('🔧 Check your environment variables and database configuration.');
+      console.error('Check your environment variables and database configuration.');
     }
     process.exit(1);
   }

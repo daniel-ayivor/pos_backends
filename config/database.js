@@ -18,7 +18,7 @@ const pool = new Pool({
 // Enhanced connection test with better error handling
 const connectDB = async () => {
   try {
-    console.log('🔍 Attempting database connection...');
+    console.log(' Attempting database connection...');
     console.log(`   Environment: ${process.env.NODE_ENV}`);
     console.log(`   Host: ${process.env.DB_HOST || 'localhost'}`);
     console.log(`   Database: ${process.env.DB_NAME || 'pos_database'}`);
@@ -26,11 +26,11 @@ const connectDB = async () => {
     console.log(`   SSL: ${process.env.NODE_ENV === 'production' ? 'Enabled' : 'Disabled'}`);
     
     const client = await pool.connect();
-    console.log('✅ PostgreSQL connected successfully');
+    console.log(' PostgreSQL connected successfully');
     client.release();
   } catch (error) {
-    console.error('❌ PostgreSQL connection error:', error.message);
-    console.error('🔧 Troubleshooting tips:');
+    console.error(' PostgreSQL connection error:', error.message);
+    console.error('Troubleshooting tips:');
     console.error('   1. Check if DB_HOST, DB_NAME, DB_USER, DB_PASSWORD are set');
     console.error('   2. Verify database credentials are correct');
     console.error('   3. Ensure database is accessible from deployment server');
@@ -38,7 +38,7 @@ const connectDB = async () => {
     
     // Don't exit immediately in production, give it a chance to retry
     if (process.env.NODE_ENV === 'production') {
-      console.error('⚠️  Production mode: Will retry connection...');
+      console.error('  Production mode: Will retry connection...');
       return false;
     } else {
       process.exit(1);
