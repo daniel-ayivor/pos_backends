@@ -1,11 +1,9 @@
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
+const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
-
 const { connectDB } = require('./config/database');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -21,6 +19,9 @@ const timeTrackingRoutes = require('./routes/timeTracking');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust proxy for correct IP handling behind load balancers (Render, Heroku, etc.)
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 app.use(compression());
@@ -31,14 +32,11 @@ const allowedOrigins = [
   'https://pos-service-alpha.vercel.app',
   'https://pos-backends.onrender.com',
   process.env.CORS_ORIGIN
-].filter(Boolean); // Remove any undefined values
+].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -49,8 +47,8 @@ app.use(cors({
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api/', limiter);
@@ -67,10 +65,10 @@ app.use('/uploads', express.static('uploads'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV 
+    environment: process.env.NODE_ENV
   });
 });
 
@@ -88,19 +86,17 @@ app.use('/api/time-tracking', timeTrackingRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Route not found',
-    path: req.originalUrl 
+    path: req.originalUrl
   });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
-  
   res.status(statusCode).json({
     error: message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
@@ -110,29 +106,28 @@ app.use((err, req, res, next) => {
 // Start server
 const startServer = async () => {
   try {
-    console.log(' Starting POS Backend Server...');
-    console.log(` Environment: ${process.env.NODE_ENV}`);
-    console.log(` Port: ${PORT}`);
-    
+    console.log('Starting POS Backend Server...');
+    console.log(`Environment: ${process.env.NODE_ENV}`);
+    console.log(`Port: ${PORT}`);
+
     // Try to connect to database
     const dbConnected = await connectDB();
-    
+
     if (!dbConnected && process.env.NODE_ENV === 'production') {
-      console.log('  Database connection failed, but continuing in production mode...');
-      console.log(' Please check your database configuration and environment variables.');
+      console.log('Database connection failed, but continuing in production mode...');
+      console.log('Please check your database configuration and environment variables.');
     }
-    
+
     app.listen(PORT, () => {
-      console.log(` Server running on port ${PORT}`);
-      console.log(` Health check: http://localhost:${PORT}/health`);
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Health check: http://localhost:${PORT}/api/health`);
       console.log(`Environment: ${process.env.NODE_ENV}`);
-      
       if (process.env.NODE_ENV === 'production') {
-        console.log(' Production deployment successful!');
+        console.log('Production deployment successful!');
       }
     });
   } catch (error) {
-    console.error(' Failed to start server:', error);
+    console.error('Failed to start server:', error);
     if (process.env.NODE_ENV === 'production') {
       console.error('Check your environment variables and database configuration.');
     }
