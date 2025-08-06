@@ -103,6 +103,9 @@ app.use((err, req, res, next) => {
   });
 });
 
+
+console.log("🔥 DATABASE_URL at runtime:", process.env.DATABASE_URL);
+
 // Start server
 const startServer = async () => {
   try {

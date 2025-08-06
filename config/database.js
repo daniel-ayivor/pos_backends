@@ -1,15 +1,12 @@
 const { Pool } = require('pg');
 
-// Database configuration with production-ready defaults
 const pool = new Pool({
-  connectionString:"postgresql://postgres:shopeEase23456@aws-0-eu-north-1.pooler.supabase.com:5432/postgres"
-,
-  
+  connectionString: process.env.DATABASE_URL,
   ssl: { 
     rejectUnauthorized: false // Required for Supabase
   },
-  max: 10, // Maximum number of connections in pool
-  idleTimeoutMillis: 30000 // Close idle connections after 30s
+  max: 10,
+  idleTimeoutMillis: 30000
 });
 
 // Connection test with basic retry logic
