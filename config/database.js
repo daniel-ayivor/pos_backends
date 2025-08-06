@@ -2,7 +2,9 @@ const { Pool } = require('pg');
 
 // Database configuration with production-ready defaults
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgresql://postgres:shopeEase23456@db.ecjovjkvyfuflenewvrz.supabase.co:5432/postgres",
+  connectionString:"postgresql://postgres:shopeEase23456@aws-0-eu-north-1.pooler.supabase.com:5432/postgres"
+,
+  
   ssl: { 
     rejectUnauthorized: false // Required for Supabase
   },
