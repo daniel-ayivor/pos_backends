@@ -9,7 +9,7 @@ const pool = new Pool({
   idleTimeoutMillis: 30000
 });
 
-// Connection test with basic retry logic
+// Function to connect to the database
 const connectDB = async (retries = 3) => {
   for (let i = 0; i < retries; i++) {
     try {
