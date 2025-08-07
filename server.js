@@ -1,10 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const compression = require('compression');
 const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const { connectDB } = require('./config/database');
+const db = require('./models'); // Import Sequelize models
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const employeeRoutes = require('./routes/employees');
@@ -113,12 +114,15 @@ const startServer = async () => {
     console.log(`Environment: ${process.env.NODE_ENV}`);
     console.log(`Port: ${PORT}`);
 
-    // Try to connect to database
-    const dbConnected = await connectDB();
-
-    if (!dbConnected && process.env.NODE_ENV === 'production') {
-      console.log('Database connection failed, but continuing in production mode...');
-      console.log('Please check your database configuration and environment variables.');
+    // Try to connect to database using Sequelize
+    await db.sequelize.authenticate();
+    console.log('Database connection established successfully');
+    
+    // Sync models with database (in development, you might want to use {force: true} to recreate tables)
+    if (process.env.NODE_ENV === 'development' && process.env.SYNC_DB === 'true') {
+      console.log('Syncing database models...');
+      await db.sequelize.sync({ alter: true });
+      console.log('Database synced successfully');
     }
 
     app.listen(PORT, () => {

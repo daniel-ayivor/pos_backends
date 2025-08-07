@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
-const { query } = require('../config/database');
+const { User } = require('../models');
+const { Op } = require('sequelize');
 
 function getDefaultPermissions(role) {
   const permissions = {
@@ -41,33 +42,39 @@ async function getAllUsers(req, res) {
   try {
     const { page = 1, limit = 10, search = '', role = '', status = 'all' } = req.query;
     const offset = (page - 1) * limit;
-    let whereClause = 'WHERE 1=1';
-    const params = [];
+    
+    // Build where conditions for Sequelize
+    const whereConditions = {};
+    
     if (search) {
-      whereClause += ' AND (name ILIKE $1 OR email ILIKE $1)';
-      params.push(`%${search}%`);
+      whereConditions[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } }
+      ];
     }
+    
     if (role) {
-      const paramIndex = params.length + 1;
-      whereClause += ` AND role = $${paramIndex}`;
-      params.push(role);
+      whereConditions.role = role;
     }
+    
     if (status !== 'all') {
-      const paramIndex = params.length + 1;
-      whereClause += ` AND is_active = $${paramIndex}`;
-      params.push(status === 'active');
+      whereConditions.is_active = status === 'active';
     }
-    const countResult = await query(`SELECT COUNT(*) FROM users ${whereClause}`, params);
-    const total = parseInt(countResult.rows[0].count);
-    const result = await query(
-      `SELECT id, name, email, role, permissions, avatar, is_active, created_at, updated_at, last_login
-       FROM users ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limit, offset]
-    );
+    
+    // Get total count
+    const total = await User.count({ where: whereConditions });
+    
+    // Get users with pagination
+    const users = await User.findAll({
+      where: whereConditions,
+      attributes: ['id', 'name', 'email', 'role', 'permissions', 'is_active', 'created_at', 'updated_at', 'last_login'],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+    
     res.json({
-      users: result.rows,
+      users,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -83,15 +90,15 @@ async function getAllUsers(req, res) {
 
 async function getUserById(req, res) {
   try {
-    const result = await query(
-      `SELECT id, name, email, role, permissions, avatar, is_active, created_at, updated_at, last_login
-       FROM users WHERE id = $1`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) {
+    const user = await User.findByPk(req.params.id, {
+      attributes: ['id', 'name', 'email', 'role', 'permissions', 'is_active', 'created_at', 'updated_at', 'last_login']
+    });
+    
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json({ user: result.rows[0] });
+    
+    res.json({ user });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
@@ -101,21 +108,33 @@ async function getUserById(req, res) {
 async function createUser(req, res) {
   try {
     const { name, email, password, role } = req.body;
-    const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
       return res.status(400).json({ error: 'User with this email already exists' });
     }
+    
+    // Hash password
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-    const result = await query(
-      `INSERT INTO users (id, name, email, password_hash, role, permissions, is_active, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-       RETURNING id, name, email, role, permissions, avatar, is_active, created_at`,
-      [uuidv4(), name, email, hashedPassword, role, getDefaultPermissions(role), true]
-    );
+    
+    // Create user
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+      role,
+      permissions: getDefaultPermissions(role),
+      is_active: true
+    });
+    
+    // Return user without password
+    const { password: _, ...userWithoutPassword } = user.toJSON();
+    
     res.status(201).json({
       message: 'User created successfully',
-      user: result.rows[0]
+      user: userWithoutPassword
     });
   } catch (error) {
     console.error('Create user error:', error);
@@ -126,24 +145,36 @@ async function createUser(req, res) {
 async function updateUser(req, res) {
   try {
     const { name, email, role, permissions, is_active } = req.body;
-    const existingUser = await query('SELECT id FROM users WHERE id = $1', [req.params.id]);
-    if (existingUser.rows.length === 0) {
+    
+    // Check if user exists
+    const existingUser = await User.findByPk(req.params.id);
+    if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
-    const emailCheck = await query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, req.params.id]);
-    if (emailCheck.rows.length > 0) {
+    
+    // Check if email is taken by another user
+    const emailCheck = await User.findOne({ 
+      where: { 
+        email, 
+        id: { [Op.ne]: req.params.id } 
+      } 
+    });
+    if (emailCheck) {
       return res.status(400).json({ error: 'Email is already taken by another user' });
     }
-    const result = await query(
-      `UPDATE users 
-       SET name = $1, email = $2, role = $3, permissions = $4, is_active = $5, updated_at = NOW()
-       WHERE id = $6
-       RETURNING id, name, email, role, permissions, avatar, is_active, created_at, updated_at`,
-      [name, email, role, permissions || getDefaultPermissions(role), is_active, req.params.id]
-    );
+    
+    // Update user
+    const updatedUser = await existingUser.update({
+      name,
+      email,
+      role,
+      permissions: permissions || getDefaultPermissions(role),
+      is_active
+    });
+    
     res.json({
       message: 'User updated successfully',
-      user: result.rows[0]
+      user: updatedUser
     });
   } catch (error) {
     console.error('Update user error:', error);
@@ -157,13 +188,17 @@ async function updateUserPassword(req, res) {
     if (!password || password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
-    const existingUser = await query('SELECT id FROM users WHERE id = $1', [req.params.id]);
-    if (existingUser.rows.length === 0) {
+    
+    const existingUser = await User.findByPk(req.params.id);
+    if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
+    
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-    await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, req.params.id]);
+    
+    await existingUser.update({ password: hashedPassword });
+    
     res.json({ message: 'User password updated successfully' });
   } catch (error) {
     console.error('Update user password error:', error);
@@ -173,17 +208,22 @@ async function updateUserPassword(req, res) {
 
 async function deleteUser(req, res) {
   try {
-    const existingUser = await query('SELECT id, role FROM users WHERE id = $1', [req.params.id]);
-    if (existingUser.rows.length === 0) {
+    const existingUser = await User.findByPk(req.params.id);
+    if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
-    if (existingUser.rows[0].role === 'administrator') {
-      const adminCount = await query('SELECT COUNT(*) as count FROM users WHERE role = $1 AND is_active = true', ['administrator']);
-      if (parseInt(adminCount.rows[0].count) <= 1) {
+    
+    if (existingUser.role === 'administrator') {
+      const adminCount = await User.count({ 
+        where: { role: 'administrator', is_active: true } 
+      });
+      if (adminCount <= 1) {
         return res.status(400).json({ error: 'Cannot delete the last administrator' });
       }
     }
-    await query('UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1', [req.params.id]);
+    
+    await existingUser.update({ is_active: false });
+    
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Delete user error:', error);

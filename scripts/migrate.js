@@ -1,309 +1,253 @@
-const { query, getClient } = require('../config/database');
+'use strict';
+const { Sequelize, DataTypes } = require('sequelize');
+const db = require('../models');
+const dotenv = require('dotenv');
 
-const createTables = async () => {
-  const client = await getClient();
-  
+// Load environment variables
+dotenv.config();
+
+// Function to run migrations
+async function runMigrations() {
   try {
-    await client.query('BEGIN');
-
-    // Create users table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        role VARCHAR(50) NOT NULL CHECK (role IN ('administrator', 'supervisor', 'cashier', 'staff')),
-        permissions TEXT[] DEFAULT '{}',
-        avatar VARCHAR(500),
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW(),
-        last_login TIMESTAMP
-      )
-    `);
-
-    // Create employees table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS employees (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        phone VARCHAR(20),
-        role VARCHAR(50) NOT NULL CHECK (role IN ('designer', 'developer', 'marketer', 'manager', 'assistant')),
-        department VARCHAR(50),
-        salary DECIMAL(10,2),
-        hire_date DATE DEFAULT CURRENT_DATE,
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create clients table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS clients (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        phone VARCHAR(20),
-        company VARCHAR(100),
-        address TEXT,
-        notes TEXT,
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create services table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS services (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(100) NOT NULL,
-        description TEXT,
-        price DECIMAL(10,2) NOT NULL,
-        category VARCHAR(50) NOT NULL,
-        duration_hours INTEGER,
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create projects table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS projects (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(100) NOT NULL,
-        client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-        service_id UUID REFERENCES services(id) ON DELETE SET NULL,
-        assigned_to UUID[] DEFAULT '{}',
-        status VARCHAR(50) NOT NULL CHECK (status IN ('brief-received', 'in-progress', 'review', 'revision', 'completed', 'delivered')),
-        priority VARCHAR(20) NOT NULL CHECK (priority IN ('low', 'medium', 'high')),
-        progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
-        start_date DATE NOT NULL,
-        due_date DATE NOT NULL,
-        value DECIMAL(10,2) NOT NULL,
-        notes TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create invoices table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS invoices (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        invoice_number VARCHAR(50) UNIQUE NOT NULL,
-        client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-        amount DECIMAL(10,2) NOT NULL,
-        tax_amount DECIMAL(10,2) DEFAULT 0,
-        total_amount DECIMAL(10,2) NOT NULL,
-        status VARCHAR(20) NOT NULL CHECK (status IN ('draft', 'pending', 'paid', 'overdue')),
-        issue_date DATE NOT NULL,
-        due_date DATE NOT NULL,
-        paid_date DATE,
-        notes TEXT,
-        created_by UUID REFERENCES users(id),
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create invoice_items table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS invoice_items (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        invoice_id UUID REFERENCES invoices(id) ON DELETE CASCADE,
-        service_id UUID REFERENCES services(id) ON DELETE SET NULL,
-        description VARCHAR(255) NOT NULL,
-        quantity INTEGER NOT NULL DEFAULT 1,
-        unit_price DECIMAL(10,2) NOT NULL,
-        total_price DECIMAL(10,2) NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create transactions table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS transactions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        transaction_number VARCHAR(50) UNIQUE NOT NULL,
-        client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
-        amount DECIMAL(10,2) NOT NULL,
-        tax_amount DECIMAL(10,2) DEFAULT 0,
-        total_amount DECIMAL(10,2) NOT NULL,
-        payment_method VARCHAR(50) NOT NULL CHECK (payment_method IN ('cash', 'card', 'mobile_money', 'bank_transfer')),
-        payment_status VARCHAR(20) NOT NULL DEFAULT 'completed' CHECK (payment_status IN ('pending', 'completed', 'failed', 'refunded')),
-        notes TEXT,
-        created_by UUID REFERENCES users(id),
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create transaction_items table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS transaction_items (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        transaction_id UUID REFERENCES transactions(id) ON DELETE CASCADE,
-        service_id UUID REFERENCES services(id) ON DELETE SET NULL,
-        description VARCHAR(255) NOT NULL,
-        quantity INTEGER NOT NULL DEFAULT 1,
-        unit_price DECIMAL(10,2) NOT NULL,
-        total_price DECIMAL(10,2) NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create time_entries table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS time_entries (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,
-        clock_in TIMESTAMP NOT NULL,
-        clock_out TIMESTAMP,
-        status VARCHAR(20) NOT NULL CHECK (status IN ('clocked-in', 'clocked-out', 'break')),
-        total_hours DECIMAL(5,2),
-        device_id VARCHAR(100),
-        location VARCHAR(255),
-        notes TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create system_settings table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS system_settings (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        setting_key VARCHAR(100) UNIQUE NOT NULL,
-        setting_value TEXT,
-        description TEXT,
-        updated_by UUID REFERENCES users(id),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
-    // Create indexes for better performance
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-      CREATE INDEX IF NOT EXISTS idx_employees_email ON employees(email);
-      CREATE INDEX IF NOT EXISTS idx_employees_role ON employees(role);
-      CREATE INDEX IF NOT EXISTS idx_clients_email ON clients(email);
-      CREATE INDEX IF NOT EXISTS idx_clients_company ON clients(company);
-      CREATE INDEX IF NOT EXISTS idx_services_category ON services(category);
-      CREATE INDEX IF NOT EXISTS idx_projects_client_id ON projects(client_id);
-      CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
-      CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
-      CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
-      CREATE INDEX IF NOT EXISTS idx_transactions_client_id ON transactions(client_id);
-      CREATE INDEX IF NOT EXISTS idx_time_entries_employee_id ON time_entries(employee_id);
-      CREATE INDEX IF NOT EXISTS idx_time_entries_clock_in ON time_entries(clock_in);
-    `);
-
-    await client.query('COMMIT');
-    console.log('✅ Database tables created successfully');
-
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ Database migration failed:', error);
-    throw error;
-  } finally {
-    client.release();
-  }
-};
-
-// Insert default data
-const insertDefaultData = async () => {
-  try {
-    // Insert default admin user
-    const bcrypt = require('bcryptjs');
-    const hashedPassword = await bcrypt.hash('admin123', 12);
+    console.log('Starting database migrations...');
     
-    await query(`
-      INSERT INTO users (id, name, email, password_hash, role, permissions, is_active)
-      VALUES (
-        '550e8400-e29b-41d4-a716-446655440000',
-        'Admin User',
-        'admin@pos.com',
-        $1,
-        'administrator',
-        ARRAY['user:read', 'user:write', 'user:delete', 'employee:read', 'employee:write', 'employee:delete', 'client:read', 'client:write', 'client:delete', 'service:read', 'service:write', 'service:delete', 'project:read', 'project:write', 'project:delete', 'invoice:read', 'invoice:write', 'invoice:delete', 'transaction:read', 'transaction:write', 'analytics:read', 'settings:read', 'settings:write'],
-        true
-      )
-      ON CONFLICT (email) DO NOTHING
-    `, [hashedPassword]);
-
-    // Insert default services
-    await query(`
-      INSERT INTO services (name, description, price, category, duration_hours) VALUES
-      ('Logo Design', 'Professional logo design with multiple concepts', 500.00, 'Design', 8),
-      ('Business Card Design', 'Custom business card design', 150.00, 'Print', 2),
-      ('Website Design', 'Complete website design and development', 2500.00, 'Web', 40),
-      ('Social Media Package', 'Social media management and content creation', 800.00, 'Marketing', 20),
-      ('Brochure Design', 'Professional brochure design', 300.00, 'Print', 4),
-      ('SEO Optimization', 'Search engine optimization services', 1200.00, 'Marketing', 16)
-      ON CONFLICT DO NOTHING
-    `);
-
-    // Insert default clients
-    await query(`
-      INSERT INTO clients (name, email, phone, company) VALUES
-      ('TechCorp Ltd', 'contact@techcorp.com', '+233 24 123 4567', 'TechCorp Ltd'),
-      ('Local Restaurant', 'info@restaurant.com', '+233 26 234 5678', 'Local Restaurant'),
-      ('Fashion Store', 'hello@fashion.com', '+233 20 345 6789', 'Fashion Store'),
-      ('Startup Inc', 'team@startup.com', '+233 54 456 7890', 'Startup Inc')
-      ON CONFLICT DO NOTHING
-    `);
-
-    // Insert default employees
-    await query(`
-      INSERT INTO employees (name, email, phone, role, department, salary) VALUES
-      ('James Asante', 'james@pos.com', '+233 24 111 1111', 'designer', 'Design', 2500.00),
-      ('Sarah Mensah', 'sarah@pos.com', '+233 26 222 2222', 'developer', 'Development', 3000.00),
-      ('Kwame Osei', 'kwame@pos.com', '+233 20 333 3333', 'marketer', 'Marketing', 2200.00),
-      ('Ama Kufuor', 'ama@pos.com', '+233 54 444 4444', 'manager', 'Management', 3500.00)
-      ON CONFLICT DO NOTHING
-    `);
-
-    // Insert default system settings
-    await query(`
-      INSERT INTO system_settings (setting_key, setting_value, description) VALUES
-      ('company_name', 'POS Advertising Agency', 'Company name'),
-      ('tax_rate', '0.125', 'Tax rate as decimal (12.5%)'),
-      ('currency', 'GHS', 'Default currency'),
-      ('invoice_prefix', 'INV', 'Invoice number prefix'),
-      ('transaction_prefix', 'TXN', 'Transaction number prefix')
-      ON CONFLICT (setting_key) DO NOTHING
-    `);
-
-    console.log('✅ Default data inserted successfully');
-
+    // Sync all models with the database
+    // For production, you might want to use migrations instead of sync
+    // In development, you can use { force: true } to recreate tables
+    const syncOptions = process.env.NODE_ENV === 'production' 
+      ? { alter: true } 
+      : { alter: true };
+    
+    await db.sequelize.sync(syncOptions);
+    
+    console.log('Database migrations completed successfully!');
+    process.exit(0);
   } catch (error) {
-    console.error('❌ Failed to insert default data:', error);
-    throw error;
-  }
-};
-
-// Run migrations
-const runMigrations = async () => {
-  try {
-    console.log('🔄 Starting database migration...');
-    await createTables();
-    await insertDefaultData();
-    console.log('🎉 Database migration completed successfully!');
-    console.log('📧 Default admin login: admin@pos.com / admin123');
-  } catch (error) {
-    console.error('💥 Migration failed:', error);
+    console.error('Migration failed:', error);
     process.exit(1);
   }
-};
+}
 
-// Run if called directly
+// Run migrations
 if (require.main === module) {
   runMigrations();
 }
 
-module.exports = { createTables, insertDefaultData, runMigrations }; 
+// Keep the original migration code for reference
+const originalMigrations = {
+  up: async (queryInterface, Sequelize) => {
+    // Users
+    await queryInterface.createTable('users', {
+      id: {
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.literal('gen_random_uuid()'),
+        primaryKey: true,
+        allowNull: false
+      },
+      name: { type: Sequelize.STRING(100), allowNull: false },
+      email: { type: Sequelize.STRING(255), allowNull: false, unique: true },
+      password_hash: { type: Sequelize.STRING(255), allowNull: false },
+      role: { type: Sequelize.ENUM('administrator', 'supervisor', 'cashier', 'staff'), allowNull: false },
+      permissions: { type: Sequelize.ARRAY(Sequelize.TEXT), defaultValue: [] },
+      avatar: Sequelize.STRING(500),
+      is_active: { type: Sequelize.BOOLEAN, defaultValue: true },
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') },
+      last_login: Sequelize.DATE
+    });
+
+    // Employees
+    await queryInterface.createTable('employees', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      name: { type: Sequelize.STRING(100), allowNull: false },
+      email: { type: Sequelize.STRING(255), allowNull: false, unique: true },
+      phone: Sequelize.STRING(20),
+      role: { type: Sequelize.ENUM('designer', 'developer', 'marketer', 'manager', 'assistant'), allowNull: false },
+      department: Sequelize.STRING(50),
+      salary: Sequelize.DECIMAL(10,2),
+      hire_date: { type: Sequelize.DATEONLY, defaultValue: Sequelize.literal('CURRENT_DATE') },
+      is_active: { type: Sequelize.BOOLEAN, defaultValue: true },
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Clients
+    await queryInterface.createTable('clients', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      name: { type: Sequelize.STRING(100), allowNull: false },
+      email: { type: Sequelize.STRING(255), allowNull: false },
+      phone: Sequelize.STRING(20),
+      company: Sequelize.STRING(100),
+      address: Sequelize.TEXT,
+      notes: Sequelize.TEXT,
+      is_active: { type: Sequelize.BOOLEAN, defaultValue: true },
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Services
+    await queryInterface.createTable('services', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      name: { type: Sequelize.STRING(100), allowNull: false },
+      description: Sequelize.TEXT,
+      price: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      category: { type: Sequelize.STRING(50), allowNull: false },
+      duration_hours: Sequelize.INTEGER,
+      is_active: { type: Sequelize.BOOLEAN, defaultValue: true },
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Projects
+    await queryInterface.createTable('projects', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      name: { type: Sequelize.STRING(100), allowNull: false },
+      client_id: { type: Sequelize.UUID, references: { model: 'clients', key: 'id' }, onDelete: 'CASCADE' },
+      service_id: { type: Sequelize.UUID, references: { model: 'services', key: 'id' }, onDelete: 'SET NULL' },
+      assigned_to: { type: Sequelize.ARRAY(Sequelize.UUID), defaultValue: [] },
+      status: { type: Sequelize.ENUM('brief-received', 'in-progress', 'review', 'revision', 'completed', 'delivered'), allowNull: false },
+      priority: { type: Sequelize.ENUM('low', 'medium', 'high'), allowNull: false },
+      progress: { type: Sequelize.INTEGER, defaultValue: 0 },
+      start_date: { type: Sequelize.DATEONLY, allowNull: false },
+      due_date: { type: Sequelize.DATEONLY, allowNull: false },
+      value: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      notes: Sequelize.TEXT,
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Invoices
+    await queryInterface.createTable('invoices', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      invoice_number: { type: Sequelize.STRING(50), allowNull: false, unique: true },
+      client_id: { type: Sequelize.UUID, references: { model: 'clients', key: 'id' }, onDelete: 'CASCADE' },
+      amount: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      tax_amount: { type: Sequelize.DECIMAL(10,2), defaultValue: 0 },
+      total_amount: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      status: { type: Sequelize.ENUM('draft', 'pending', 'paid', 'overdue'), allowNull: false },
+      issue_date: { type: Sequelize.DATEONLY, allowNull: false },
+      due_date: { type: Sequelize.DATEONLY, allowNull: false },
+      paid_date: Sequelize.DATEONLY,
+      notes: Sequelize.TEXT,
+      created_by: { type: Sequelize.UUID, references: { model: 'users', key: 'id' } },
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Invoice Items
+    await queryInterface.createTable('invoice_items', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      invoice_id: { type: Sequelize.UUID, references: { model: 'invoices', key: 'id' }, onDelete: 'CASCADE' },
+      service_id: { type: Sequelize.UUID, references: { model: 'services', key: 'id' }, onDelete: 'SET NULL' },
+      description: { type: Sequelize.STRING(255), allowNull: false },
+      quantity: { type: Sequelize.INTEGER, defaultValue: 1 },
+      unit_price: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      total_price: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Transactions
+    await queryInterface.createTable('transactions', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      transaction_number: { type: Sequelize.STRING(50), allowNull: false, unique: true },
+      client_id: { type: Sequelize.UUID, references: { model: 'clients', key: 'id' }, onDelete: 'SET NULL' },
+      amount: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      tax_amount: { type: Sequelize.DECIMAL(10,2), defaultValue: 0 },
+      total_amount: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      payment_method: { type: Sequelize.ENUM('cash', 'card', 'mobile_money', 'bank_transfer'), allowNull: false },
+      payment_status: { type: Sequelize.ENUM('pending', 'completed', 'failed', 'refunded'), allowNull: false, defaultValue: 'completed' },
+      notes: Sequelize.TEXT,
+      created_by: { type: Sequelize.UUID, references: { model: 'users', key: 'id' } },
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Transaction Items
+    await queryInterface.createTable('transaction_items', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      transaction_id: { type: Sequelize.UUID, references: { model: 'transactions', key: 'id' }, onDelete: 'CASCADE' },
+      service_id: { type: Sequelize.UUID, references: { model: 'services', key: 'id' }, onDelete: 'SET NULL' },
+      description: { type: Sequelize.STRING(255), allowNull: false },
+      quantity: { type: Sequelize.INTEGER, defaultValue: 1 },
+      unit_price: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      total_price: { type: Sequelize.DECIMAL(10,2), allowNull: false },
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Time Entries
+    await queryInterface.createTable('time_entries', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      employee_id: { type: Sequelize.UUID, references: { model: 'employees', key: 'id' }, onDelete: 'CASCADE' },
+      clock_in: { type: Sequelize.DATE, allowNull: false },
+      clock_out: Sequelize.DATE,
+      status: { type: Sequelize.ENUM('clocked-in', 'clocked-out', 'break'), allowNull: false },
+      total_hours: Sequelize.DECIMAL(5,2),
+      device_id: Sequelize.STRING(100),
+      location: Sequelize.STRING(255),
+      notes: Sequelize.TEXT,
+      created_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') },
+      updated_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // System Settings
+    await queryInterface.createTable('system_settings', {
+      id: { type: Sequelize.UUID, defaultValue: Sequelize.literal('gen_random_uuid()'), primaryKey: true, allowNull: false },
+      setting_key: { type: Sequelize.STRING(100), allowNull: false, unique: true },
+      setting_value: Sequelize.TEXT,
+      description: Sequelize.TEXT,
+      updated_by: { type: Sequelize.UUID, references: { model: 'users', key: 'id' } },
+      updated_at: { type: Sequelize.DATE, defaultValue: Sequelize.literal('NOW()') }
+    });
+
+    // Analytics
+    await queryInterface.createTable('analytics', {
+      id: {
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.literal('gen_random_uuid()'),
+        primaryKey: true,
+        allowNull: false
+      },
+      metric: {
+        type: Sequelize.STRING(100),
+        allowNull: false
+      },
+      value: {
+        type: Sequelize.DECIMAL(20, 4),
+        allowNull: false
+      },
+      period: {
+        type: Sequelize.STRING(50), // e.g. 'daily', 'monthly', 'yearly'
+        allowNull: false
+      },
+      recorded_at: {
+        type: Sequelize.DATE,
+        defaultValue: Sequelize.literal('NOW()'),
+        allowNull: false
+      },
+      notes: Sequelize.TEXT,
+      created_at: {
+        type: Sequelize.DATE,
+        defaultValue: Sequelize.literal('NOW()')
+      },
+      updated_at: {
+        type: Sequelize.DATE,
+        defaultValue: Sequelize.literal('NOW()')
+      }
+    });
+  },
+
+  down: async (queryInterface, Sequelize) => {
+    // Drop tables in reverse order to avoid FK constraint errors
+    await queryInterface.dropTable('analytics');
+    await queryInterface.dropTable('system_settings');
+    await queryInterface.dropTable('time_entries');
+    await queryInterface.dropTable('transaction_items');
+    await queryInterface.dropTable('transactions');
+    await queryInterface.dropTable('invoice_items');
+    await queryInterface.dropTable('invoices');
+    await queryInterface.dropTable('projects');
+    await queryInterface.dropTable('services');
+    await queryInterface.dropTable('clients');
+    await queryInterface.dropTable('employees');
+    await queryInterface.dropTable('users');
+  }
+};

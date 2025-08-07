@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
-const { query } = require('../config/database');
+const { Client } = require('../models');
+const { Op } = require('sequelize');
 
 // Get all clients with pagination and search
 async function getAllClients(req, res) {
@@ -7,43 +8,36 @@ async function getAllClients(req, res) {
     const { page = 1, limit = 10, search = '', status = 'all' } = req.query;
     const offset = (page - 1) * limit;
 
-    let whereClause = 'WHERE is_active = true';
-    const params = [];
-
+    // Build where conditions for Sequelize
+    const whereConditions = {};
+    
     if (search) {
-      whereClause += ' AND (name ILIKE $1 OR email ILIKE $1 OR company ILIKE $1)';
-      params.push(`%${search}%`);
+      whereConditions[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { company: { [Op.iLike]: `%${search}%` } }
+      ];
     }
 
     if (status !== 'all') {
-      const paramIndex = params.length + 1;
-      whereClause += ` AND is_active = $${paramIndex}`;
-      params.push(status === 'active');
+      whereConditions.is_active = (status === 'active');
     }
 
-    // Get total count
-    const countResult = await query(
-      `SELECT COUNT(*) FROM clients ${whereClause}`,
-      params
-    );
-    const total = parseInt(countResult.rows[0].count);
-
-    // Get clients
-    const result = await query(
-      `SELECT id, name, email, phone, company, address, notes, is_active, created_at, updated_at
-       FROM clients ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limit, offset]
-    );
+    // Get clients with count using Sequelize
+    const { count, rows } = await Client.findAndCountAll({
+      where: whereConditions,
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset: offset
+    });
 
     res.json({
-      clients: result.rows,
+      clients: rows,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
+        total: count,
+        pages: Math.ceil(count / limit)
       }
     });
   } catch (error) {
@@ -55,17 +49,13 @@ async function getAllClients(req, res) {
 // Get single client by ID
 async function getClientById(req, res) {
   try {
-    const result = await query(
-      `SELECT id, name, email, phone, company, address, notes, is_active, created_at, updated_at
-       FROM clients WHERE id = $1`,
-      [req.params.id]
-    );
+    const client = await Client.findByPk(req.params.id);
 
-    if (result.rows.length === 0) {
+    if (!client) {
       return res.status(404).json({ error: 'Client not found' });
     }
 
-    res.json({ client: result.rows[0] });
+    res.json({ client });
   } catch (error) {
     console.error('Get client error:', error);
     res.status(500).json({ error: 'Failed to get client' });
@@ -78,25 +68,28 @@ async function createClient(req, res) {
     const { name, email, phone, company, address, notes } = req.body;
 
     // Check if client with email already exists
-    const existingClient = await query(
-      'SELECT id FROM clients WHERE email = $1',
-      [email]
-    );
+    const existingClient = await Client.findOne({
+      where: { email }
+    });
 
-    if (existingClient.rows.length > 0) {
+    if (existingClient) {
       return res.status(400).json({ error: 'Client with this email already exists' });
     }
 
-    const result = await query(
-      `INSERT INTO clients (id, name, email, phone, company, address, notes, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-       RETURNING id, name, email, phone, company, address, notes, is_active, created_at, updated_at`,
-      [uuidv4(), name, email, phone, company, address, notes]
-    );
+    // Create new client using Sequelize
+    const client = await Client.create({
+      id: uuidv4(),
+      name,
+      email,
+      phone,
+      company,
+      address,
+      notes
+    });
 
     res.status(201).json({
       message: 'Client created successfully',
-      client: result.rows[0]
+      client
     });
   } catch (error) {
     console.error('Create client error:', error);
@@ -110,36 +103,40 @@ async function updateClient(req, res) {
     const { name, email, phone, company, address, notes } = req.body;
 
     // Check if client exists
-    const existingClient = await query(
-      'SELECT id FROM clients WHERE id = $1',
-      [req.params.id]
-    );
+    const existingClient = await Client.findByPk(req.params.id);
 
-    if (existingClient.rows.length === 0) {
+    if (!existingClient) {
       return res.status(404).json({ error: 'Client not found' });
     }
 
     // Check if email is already taken by another client
-    const emailCheck = await query(
-      'SELECT id FROM clients WHERE email = $1 AND id != $2',
-      [email, req.params.id]
-    );
+    const emailCheck = await Client.findOne({
+      where: {
+        email,
+        id: { [Op.ne]: req.params.id }
+      }
+    });
 
-    if (emailCheck.rows.length > 0) {
+    if (emailCheck) {
       return res.status(400).json({ error: 'Email is already taken by another client' });
     }
 
-    const result = await query(
-      `UPDATE clients 
-       SET name = $1, email = $2, phone = $3, company = $4, address = $5, notes = $6, updated_at = NOW()
-       WHERE id = $7
-       RETURNING id, name, email, phone, company, address, notes, is_active, created_at, updated_at`,
-      [name, email, phone, company, address, notes, req.params.id]
-    );
+    // Update client using Sequelize
+    await existingClient.update({
+      name,
+      email,
+      phone,
+      company,
+      address,
+      notes
+    });
+
+    // Reload to get updated data
+    await existingClient.reload();
 
     res.json({
       message: 'Client updated successfully',
-      client: result.rows[0]
+      client: existingClient
     });
   } catch (error) {
     console.error('Update client error:', error);
@@ -151,37 +148,44 @@ async function updateClient(req, res) {
 async function deleteClient(req, res) {
   try {
     // Check if client exists
-    const existingClient = await query(
-      'SELECT id FROM clients WHERE id = $1',
-      [req.params.id]
-    );
+    const existingClient = await Client.findByPk(req.params.id);
 
-    if (existingClient.rows.length === 0) {
+    if (!existingClient) {
       return res.status(404).json({ error: 'Client not found' });
     }
 
     // Check if client has associated invoices or transactions
-    const hasInvoices = await query(
-      'SELECT id FROM invoices WHERE client_id = $1 LIMIT 1',
-      [req.params.id]
-    );
+    // We'll need to import the models for this check
+    const db = require('../models');
+    
+    // Check for invoices if the Invoice model exists
+    let hasInvoices = false;
+    if (db.Invoice) {
+      const invoiceCount = await db.Invoice.count({
+        where: { client_id: req.params.id }
+      });
+      hasInvoices = invoiceCount > 0;
+    }
 
-    const hasTransactions = await query(
-      'SELECT id FROM transactions WHERE client_id = $1 LIMIT 1',
-      [req.params.id]
-    );
+    // Check for transactions if the Transaction model exists
+    let hasTransactions = false;
+    if (db.Transaction) {
+      const transactionCount = await db.Transaction.count({
+        where: { client_id: req.params.id }
+      });
+      hasTransactions = transactionCount > 0;
+    }
 
-    if (hasInvoices.rows.length > 0 || hasTransactions.rows.length > 0) {
+    if (hasInvoices || hasTransactions) {
       return res.status(400).json({ 
         error: 'Cannot delete client with associated invoices or transactions' 
       });
     }
 
-    // Soft delete
-    await query(
-      'UPDATE clients SET is_active = false, updated_at = NOW() WHERE id = $1',
-      [req.params.id]
-    );
+    // Soft delete using Sequelize
+    await existingClient.update({
+      is_active: false
+    });
 
     res.json({ message: 'Client deleted successfully' });
   } catch (error) {
@@ -196,12 +200,9 @@ async function getClientStats(req, res) {
     const clientId = req.params.id;
 
     // Check if client exists
-    const clientExists = await query(
-      'SELECT id FROM clients WHERE id = $1',
-      [clientId]
-    );
+    const clientExists = await Client.findByPk(clientId);
 
-    if (clientExists.rows.length === 0) {
+    if (!clientExists) {
       return res.status(404).json({ error: 'Client not found' });
     }
 

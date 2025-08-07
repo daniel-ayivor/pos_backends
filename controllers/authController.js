@@ -1,7 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
-const { query } = require('../config/database');
+const { User } = require('../models'); // Import Sequelize User model
 
 // Helper function to get default permissions based on role
 function getDefaultPermissions(role) {
@@ -43,19 +42,20 @@ function getDefaultPermissions(role) {
 async function register(req, res) {
   try {
     const { name, email, password, role } = req.body;
-    const existingUser = await query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
       return res.status(400).json({ error: 'User with this email already exists' });
     }
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
-    const result = await query(
-      `INSERT INTO users (id, name, email, password_hash, role, permissions, is_active, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-       RETURNING id, name, email, role, permissions, created_at`,
-      [uuidv4(), name, email, hashedPassword, role, getDefaultPermissions(role), true]
-    );
-    const user = result.rows[0];
+    const user = await User.create({
+      name,
+      email,
+      password_hash: hashedPassword,
+      role,
+      permissions: getDefaultPermissions(role),
+      is_active: true
+    });
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
@@ -82,14 +82,10 @@ async function register(req, res) {
 async function login(req, res) {
   try {
     const { email, password } = req.body;
-    const result = await query(
-      'SELECT id, name, email, password_hash, role, permissions, is_active FROM users WHERE email = $1',
-      [email]
-    );
-    if (result.rows.length === 0) {
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    const user = result.rows[0];
     if (!user.is_active) {
       return res.status(401).json({ error: 'Account is deactivated' });
     }
@@ -102,7 +98,7 @@ async function login(req, res) {
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
     );
-    await query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
+    await user.update({ last_login: new Date() });
     res.json({
       message: 'Login successful',
       user: {
@@ -123,15 +119,13 @@ async function login(req, res) {
 // Get current user profile
 async function getProfile(req, res) {
   try {
-    const result = await query(
-      `SELECT id, name, email, role, permissions, avatar, created_at, last_login
-       FROM users WHERE id = $1`,
-      [req.user.id]
-    );
-    if (result.rows.length === 0) {
+    const user = await User.findByPk(req.user.id, {
+      attributes: ['id', 'name', 'email', 'role', 'permissions', 'avatar', 'created_at', 'last_login']
+    });
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json({ user: result.rows[0] });
+    res.json({ user });
   } catch (error) {
     console.error('Profile error:', error);
     res.status(500).json({ error: 'Failed to get profile' });
@@ -142,22 +136,28 @@ async function getProfile(req, res) {
 async function updateProfile(req, res) {
   try {
     const { name, email, avatar } = req.body;
-    const result = await query(
-      `UPDATE users 
-       SET name = COALESCE($1, name), 
-           email = COALESCE($2, email), 
-           avatar = COALESCE($3, avatar),
-           updated_at = NOW()
-       WHERE id = $4
-       RETURNING id, name, email, role, permissions, avatar, created_at, last_login`,
-      [name, email, avatar, req.user.id]
-    );
-    if (result.rows.length === 0) {
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+    await user.update({
+      name: name ?? user.name,
+      email: email ?? user.email,
+      avatar: avatar ?? user.avatar,
+      updated_at: new Date()
+    });
     res.json({
       message: 'Profile updated successfully',
-      user: result.rows[0]
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        permissions: user.permissions,
+        avatar: user.avatar,
+        created_at: user.created_at,
+        last_login: user.last_login
+      }
     });
   } catch (error) {
     console.error('Profile update error:', error);
@@ -175,17 +175,17 @@ async function changePassword(req, res) {
     if (newPassword.length < 6) {
       return res.status(400).json({ error: 'New password must be at least 6 characters' });
     }
-    const result = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
-    if (result.rows.length === 0) {
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    const isValidPassword = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash);
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-    await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hashedPassword, req.user.id]);
+    await user.update({ password_hash: hashedPassword, updated_at: new Date() });
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
     console.error('Password change error:', error);
